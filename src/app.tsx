@@ -9,6 +9,7 @@ import { CookiePrompt } from "./components/CookiePrompt.js";
 import { BrowseList } from "./components/BrowseList.js";
 import { NowPlaying, nowPlayingRows } from "./components/NowPlaying.js";
 import { SearchInput } from "./components/SearchInput.js";
+import { Panel } from "./components/Panel.js";
 import {
   getArtistSections,
   getPlaylistTracks,
@@ -25,11 +26,13 @@ export interface AppProps {
   player: MpvClient;
 }
 
-/** Rows the chrome always occupies besides the list: outer padding (2), header (1), the
- * margin above the list (1), the margin above the footer (1), and the footer itself (1).
- * The rule + now-playing pane only exist once signed in and now-playing's own height is
- * variable (1-3 rows depending on state), so those are added separately in render. */
-const FIXED_CHROME_ROWS = 6;
+/** Rows the chrome always occupies besides any panel's own content: outer padding (2)
+ * and the margin+footer below everything (2). The main panel's own border, the
+ * now-playing panel (border + its variable content height), and the play-all error
+ * line are all added on top of this separately - see PANEL_BORDER_ROWS below. */
+const FIXED_CHROME_ROWS = 4;
+/** Top+bottom border rows a Panel always adds around its content. */
+const PANEL_BORDER_ROWS = 2;
 
 /** Resolves what a "play all" (`p`) on a playlist/album/artist entry should queue - the
  * full tracklist for a playlist/album, or the first playable section (typically "Top
@@ -209,25 +212,29 @@ export function App({ version, player }: AppProps): React.ReactElement {
 
   const termRows = process.stdout.rows ?? 24;
   const termCols = process.stdout.columns ?? 80;
-  // Rule (1) + NowPlaying's actual height only apply once signed in; the play-all error
-  // line only exists when set - both are variable, so both must be subtracted here to
-  // match what's actually rendered (same reasoning as nowPlayingRows itself).
-  const nowPlayingChrome = authStatus === "signed-in" ? 1 + nowPlayingRows(playback) : 0;
+  const panelWidth = termCols - 2; // outer app padding (1 each side)
+  // Border (2 chars) + Panel's own paddingX (2 chars) on top of the panel width.
+  const panelContentWidth = panelWidth - 4;
+
+  // The now-playing panel's own border rows plus its variable content height only
+  // apply once signed in; the play-all error line only exists when set. Both are
+  // variable, so both must be subtracted here to match what's actually rendered.
+  const nowPlayingChrome =
+    authStatus === "signed-in" ? PANEL_BORDER_ROWS + nowPlayingRows(playback) : 0;
   const errorChrome = playAllError ? 1 : 0;
-  const maxRows = Math.max(1, termRows - FIXED_CHROME_ROWS - nowPlayingChrome - errorChrome);
+  const maxRows = Math.max(
+    1,
+    termRows - FIXED_CHROME_ROWS - PANEL_BORDER_ROWS - nowPlayingChrome - errorChrome,
+  );
+
+  const panelTitle =
+    authStatus !== "signed-in" ? "cg-ytmusic" : uiMode === "search" ? "Search" : browse.view?.title ?? "cg-ytmusic";
 
   return (
     <Box flexDirection="column" height={termRows} width={termCols} padding={1} overflow="hidden">
-      <Box justifyContent="space-between">
-        <Text color={theme.green} bold>
-          {uiMode === "search" ? "Search" : browse.view ? browse.view.title : "cg-ytmusic"}
-        </Text>
-        <Text color={theme.dim}>{`v${version}`}</Text>
-      </Box>
-
       {playAllError && <Text color={theme.red}>{`Couldn't play that: ${playAllError}`}</Text>}
 
-      <Box marginTop={1} flexGrow={1} flexDirection="column" overflow="hidden">
+      <Panel title={panelTitle} rightLabel={`v${version}`} width={panelWidth} grow>
         {authStatus === "checking" && <Text color={theme.yellow}>Checking saved sign-in...</Text>}
 
         {authStatus === "needs-cookie" && <CookiePrompt value={cookieBuffer} error={authError} />}
@@ -249,16 +256,15 @@ export function App({ version, player }: AppProps): React.ReactElement {
               sections={browse.view.sections}
               selectedIndex={selected}
               maxRows={maxRows}
-              width={termCols - 2}
+              width={panelContentWidth}
             />
           ) : null)}
-      </Box>
+      </Panel>
 
       {authStatus === "signed-in" && (
-        <>
-          <Text color={theme.dim}>{"─".repeat(Math.max(0, termCols - 2))}</Text>
+        <Panel title="Now Playing" width={panelWidth}>
           <NowPlaying playback={playback} queue={queue} />
-        </>
+        </Panel>
       )}
 
       <Box marginTop={1}>
