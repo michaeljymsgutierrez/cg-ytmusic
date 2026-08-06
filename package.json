@@ -1,0 +1,50 @@
+{
+  "name": "cg-ytmusic",
+  "version": "0.1.0",
+  "description": "A simple terminal music player for YouTube Music - browse your library, search, and play, powered by Ink.",
+  "type": "module",
+  "bin": {
+    "cg-ytmusic": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "packageManager": "pnpm@10.33.4",
+  "scripts": {
+    "dev": "tsx src/cli.tsx",
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/michaeljymsgutierrez/cg-ytmusic.git"
+  },
+  "keywords": [
+    "youtube-music",
+    "tui",
+    "ink",
+    "cli",
+    "music-player"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "execa": "^9.5.2",
+    "ink": "^5.1.0",
+    "react": "^18.3.1",
+    "youtubei.js": "^13.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.12",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.0"
+  }
+}
