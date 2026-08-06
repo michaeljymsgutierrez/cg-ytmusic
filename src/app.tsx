@@ -64,6 +64,7 @@ export function App({ version, player }: AppProps): React.ReactElement {
   const [searchBuffer, setSearchBuffer] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [playAllError, setPlayAllError] = useState<string | null>(null);
 
   const entries = browse.view?.sections.flatMap((s) => s.entries) ?? [];
 
@@ -167,9 +168,14 @@ export function App({ version, player }: AppProps): React.ReactElement {
     if (input === "p") {
       const entry = entries[selected];
       if (!entry || !innertube) return;
-      fetchPlayAllQueue(innertube, entry).then((tracks) => {
-        if (tracks.length > 0) queue.playQueue(tracks, 0);
-      });
+      setPlayAllError(null);
+      fetchPlayAllQueue(innertube, entry)
+        .then((tracks) => {
+          if (tracks.length > 0) queue.playQueue(tracks, 0);
+        })
+        .catch((e: unknown) => {
+          setPlayAllError(e instanceof Error ? e.message : String(e));
+        });
       return;
     }
     if ((key.backspace || key.delete || key.escape) && browse.canGoBack) {
@@ -190,14 +196,25 @@ export function App({ version, player }: AppProps): React.ReactElement {
     }
     if (input === "b" || key.leftArrow) {
       playback.seekBackward();
+      return;
+    }
+    if (input === "n") {
+      queue.playNext();
+      return;
+    }
+    if (input === "N") {
+      queue.playPrev();
     }
   });
 
   const termRows = process.stdout.rows ?? 24;
   const termCols = process.stdout.columns ?? 80;
-  // Rule (1) + NowPlaying's actual height only apply once signed in.
+  // Rule (1) + NowPlaying's actual height only apply once signed in; the play-all error
+  // line only exists when set - both are variable, so both must be subtracted here to
+  // match what's actually rendered (same reasoning as nowPlayingRows itself).
   const nowPlayingChrome = authStatus === "signed-in" ? 1 + nowPlayingRows(playback) : 0;
-  const maxRows = Math.max(1, termRows - FIXED_CHROME_ROWS - nowPlayingChrome);
+  const errorChrome = playAllError ? 1 : 0;
+  const maxRows = Math.max(1, termRows - FIXED_CHROME_ROWS - nowPlayingChrome - errorChrome);
 
   return (
     <Box flexDirection="column" height={termRows} width={termCols} padding={1} overflow="hidden">
@@ -207,6 +224,8 @@ export function App({ version, player }: AppProps): React.ReactElement {
         </Text>
         <Text color={theme.dim}>{`v${version}`}</Text>
       </Box>
+
+      {playAllError && <Text color={theme.red}>{`Couldn't play that: ${playAllError}`}</Text>}
 
       <Box marginTop={1} flexGrow={1} flexDirection="column" overflow="hidden">
         {authStatus === "checking" && <Text color={theme.yellow}>Checking saved sign-in...</Text>}
@@ -248,7 +267,7 @@ export function App({ version, player }: AppProps): React.ReactElement {
             ? "enter to submit, ctrl+c to quit"
             : uiMode === "search"
               ? "enter to search, esc to cancel"
-              : "j/k move · enter select · p play all · / search · bksp back · space pause · f/b seek · s stop · q quit"}
+              : "j/k move · enter select · p play all · / search · bksp back · space pause · f/b seek · n/N track · s stop · q quit"}
         </Text>
       </Box>
     </Box>
