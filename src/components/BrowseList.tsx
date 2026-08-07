@@ -10,6 +10,9 @@ export interface BrowseListProps {
   selectedIndex: number;
   maxRows: number;
   width: number;
+  /** Hide the subtitle column - for the split-pane layout, where DetailPane already
+   * shows that info for whichever row is selected. */
+  showSubtitle?: boolean;
 }
 
 const KIND_GLYPH: Record<BrowseEntry["kind"], string> = {
@@ -59,12 +62,15 @@ function EntryRow({
   entry,
   selected,
   width,
+  showSubtitle,
 }: {
   entry: BrowseEntry;
   selected: boolean;
   width: number;
+  showSubtitle: boolean;
 }): React.ReactElement {
-  const titleWidth = Math.max(10, width - MARKER_WIDTH - GLYPH_WIDTH - 1 - SUBTITLE_WIDTH);
+  const subtitleBudget = showSubtitle ? 1 + SUBTITLE_WIDTH : 0;
+  const titleWidth = Math.max(10, width - MARKER_WIDTH - GLYPH_WIDTH - subtitleBudget);
   return (
     <Text backgroundColor={selected ? theme.selectionBg : undefined} wrap="truncate-end">
       <Text color={theme.green} bold>
@@ -72,14 +78,20 @@ function EntryRow({
       </Text>
       <Text color={KIND_COLOR[entry.kind]}>{KIND_GLYPH[entry.kind] + " "}</Text>
       <Text color={selected ? theme.cyan : theme.fg} bold={selected}>
-        {fit(entry.title, titleWidth).padEnd(titleWidth)}
+        {showSubtitle ? fit(entry.title, titleWidth).padEnd(titleWidth) : fit(entry.title, titleWidth)}
       </Text>
-      <Text color={theme.dim}>{" " + fit(entry.subtitle, SUBTITLE_WIDTH)}</Text>
+      {showSubtitle && <Text color={theme.dim}>{" " + fit(entry.subtitle, SUBTITLE_WIDTH)}</Text>}
     </Text>
   );
 }
 
-export function BrowseList({ sections, selectedIndex, maxRows, width }: BrowseListProps): React.ReactElement {
+export function BrowseList({
+  sections,
+  selectedIndex,
+  maxRows,
+  width,
+  showSubtitle = true,
+}: BrowseListProps): React.ReactElement {
   const totalEntries = sections.reduce((n, s) => n + s.entries.length, 0);
   if (totalEntries === 0) {
     return <Text color={theme.dim}>Nothing here.</Text>;
@@ -125,6 +137,7 @@ export function BrowseList({ sections, selectedIndex, maxRows, width }: BrowseLi
             entry={row.entry!}
             selected={runningEntryIndex === selectedIndex}
             width={width}
+            showSubtitle={showSubtitle}
           />
         );
       })}
