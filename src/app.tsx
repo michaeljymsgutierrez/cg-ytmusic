@@ -7,11 +7,14 @@ import { useBrowse } from "./hooks/useBrowse.js";
 import { useQueue } from "./hooks/useQueue.js";
 import { CookiePrompt } from "./components/CookiePrompt.js";
 import { BrowseList } from "./components/BrowseList.js";
+import { DetailPane } from "./components/DetailPane.js";
 import { NowPlaying, nowPlayingRows } from "./components/NowPlaying.js";
 import { SearchInput } from "./components/SearchInput.js";
 import { Panel } from "./components/Panel.js";
+import { Footer, footerLineCount, type Hint } from "./components/Footer.js";
 import {
   getArtistSections,
+  getHomeSections,
   getPlaylistTracks,
   playableEntries,
   queueFromSelection,
@@ -27,12 +30,34 @@ export interface AppProps {
 }
 
 /** Rows the chrome always occupies besides any panel's own content: outer padding (2)
- * and the margin+footer below everything (2). The main panel's own border, the
- * now-playing panel (border + its variable content height), and the play-all error
- * line are all added on top of this separately - see PANEL_BORDER_ROWS below. */
-const FIXED_CHROME_ROWS = 4;
+ * and the margin above the footer (1). The footer's own (variable, can wrap) height,
+ * the main panel's border, the now-playing panel (border + variable content height),
+ * and the play-all error line are all added on top of this separately. */
+const FIXED_CHROME_ROWS = 3;
 /** Top+bottom border rows a Panel always adds around its content. */
 const PANEL_BORDER_ROWS = 2;
+
+const NEEDS_COOKIE_HINTS: Hint[] = [
+  { key: "enter", label: "submit" },
+  { key: "ctrl+c", label: "quit" },
+];
+const SEARCH_HINTS: Hint[] = [
+  { key: "enter", label: "search" },
+  { key: "esc", label: "cancel" },
+];
+const BROWSE_HINTS: Hint[] = [
+  { key: "j/k", label: "move" },
+  { key: "enter", label: "select" },
+  { key: "p", label: "play all" },
+  { key: "/", label: "search" },
+  { key: "h", label: "home" },
+  { key: "bksp", label: "back" },
+  { key: "space", label: "pause" },
+  { key: "f/b", label: "seek" },
+  { key: "n/N", label: "track" },
+  { key: "s", label: "stop" },
+  { key: "q", label: "quit" },
+];
 
 /** Resolves what a "play all" (`p`) on a playlist/album/artist entry should queue - the
  * full tracklist for a playlist/album, or the first playable section (typically "Top
@@ -68,6 +93,7 @@ export function App({ version, player }: AppProps): React.ReactElement {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [playAllError, setPlayAllError] = useState<string | null>(null);
+  const [homeError, setHomeError] = useState<string | null>(null);
 
   const entries = browse.view?.sections.flatMap((s) => s.entries) ?? [];
 
@@ -157,6 +183,16 @@ export function App({ version, player }: AppProps): React.ReactElement {
       setUiMode("search");
       return;
     }
+    if (input === "h") {
+      if (!innertube) return;
+      setHomeError(null);
+      getHomeSections(innertube)
+        .then((sections) => browse.openResults("Home", sections))
+        .catch((e: unknown) => {
+          setHomeError(e instanceof Error ? e.message : String(e));
+        });
+      return;
+    }
     if (key.return) {
       const entry = entries[selected];
       if (!entry) return;
@@ -215,26 +251,34 @@ export function App({ version, player }: AppProps): React.ReactElement {
   const panelWidth = termCols - 2; // outer app padding (1 each side)
   // Border (2 chars) + Panel's own paddingX (2 chars) on top of the panel width.
   const panelContentWidth = panelWidth - 4;
+  // Split-pane: list on the left, DetailPane on the right with its own left border.
+  const listWidth = Math.max(20, Math.floor(panelContentWidth * 0.6));
+  const detailBoxWidth = Math.max(10, panelContentWidth - listWidth);
+  const detailContentWidth = Math.max(5, detailBoxWidth - 2); // border(1) + paddingLeft(1)
+
+  const topError = playAllError ?? homeError;
+  const activeHints =
+    authStatus === "needs-cookie" ? NEEDS_COOKIE_HINTS : uiMode === "search" ? SEARCH_HINTS : BROWSE_HINTS;
+  const footerRows = footerLineCount(activeHints, termCols - 2);
 
   // The now-playing panel's own border rows plus its variable content height only
-  // apply once signed in; the play-all error line only exists when set. Both are
-  // variable, so both must be subtracted here to match what's actually rendered.
+  // apply once signed in; the top error line only exists when set. Both are variable,
+  // so both must be subtracted here to match what's actually rendered.
   const nowPlayingChrome =
     authStatus === "signed-in" ? PANEL_BORDER_ROWS + nowPlayingRows(playback) : 0;
-  const errorChrome = playAllError ? 1 : 0;
+  const errorChrome = topError ? 1 : 0;
   const maxRows = Math.max(
     1,
-    termRows - FIXED_CHROME_ROWS - PANEL_BORDER_ROWS - nowPlayingChrome - errorChrome,
+    termRows - FIXED_CHROME_ROWS - PANEL_BORDER_ROWS - nowPlayingChrome - errorChrome - footerRows,
   );
 
-  const panelTitle =
-    authStatus !== "signed-in" ? "cg-ytmusic" : uiMode === "search" ? "Search" : browse.view?.title ?? "cg-ytmusic";
+  const selectedEntry = entries[selected] ?? null;
 
   return (
     <Box flexDirection="column" height={termRows} width={termCols} padding={1} overflow="hidden">
-      {playAllError && <Text color={theme.red}>{`Couldn't play that: ${playAllError}`}</Text>}
+      {topError && <Text color={theme.red}>{`Couldn't do that: ${topError}`}</Text>}
 
-      <Panel title={panelTitle} rightLabel={`v${version}`} width={panelWidth} grow>
+      <Panel title="cg-ytmusic" rightLabel={`v${version}`} width={panelWidth} grow>
         {authStatus === "checking" && <Text color={theme.yellow}>Checking saved sign-in...</Text>}
 
         {authStatus === "needs-cookie" && <CookiePrompt value={cookieBuffer} error={authError} />}
@@ -252,12 +296,29 @@ export function App({ version, player }: AppProps): React.ReactElement {
           ) : browse.error ? (
             <Text color={theme.red}>{`Error: ${browse.error}`}</Text>
           ) : browse.view ? (
-            <BrowseList
-              sections={browse.view.sections}
-              selectedIndex={selected}
-              maxRows={maxRows}
-              width={panelContentWidth}
-            />
+            <Box flexDirection="row">
+              <Box width={listWidth} flexDirection="column">
+                <BrowseList
+                  sections={browse.view.sections}
+                  selectedIndex={selected}
+                  maxRows={maxRows}
+                  width={listWidth}
+                  showSubtitle={false}
+                />
+              </Box>
+              <Box
+                borderStyle="single"
+                borderTop={false}
+                borderBottom={false}
+                borderRight={false}
+                borderColor={theme.dim}
+                paddingLeft={1}
+                width={detailBoxWidth}
+                flexDirection="column"
+              >
+                <DetailPane entry={selectedEntry} width={detailContentWidth} />
+              </Box>
+            </Box>
           ) : null)}
       </Panel>
 
@@ -268,13 +329,7 @@ export function App({ version, player }: AppProps): React.ReactElement {
       )}
 
       <Box marginTop={1}>
-        <Text color={theme.dim}>
-          {authStatus === "needs-cookie"
-            ? "enter to submit, ctrl+c to quit"
-            : uiMode === "search"
-              ? "enter to search, esc to cancel"
-              : "j/k move · enter select · p play all · / search · bksp back · space pause · f/b seek · n/N track · s stop · q quit"}
-        </Text>
+        <Footer hints={activeHints} width={termCols - 2} />
       </Box>
     </Box>
   );
