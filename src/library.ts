@@ -126,6 +126,27 @@ export function queueFromSelection(
   return null;
 }
 
+/** The home feed: YT Music's own suggestions/mixes (recommended songs, playlists,
+ * artists) - same MusicCarouselShelf/MusicShelf shape as getArtistSections. */
+export async function getHomeSections(innertube: Innertube): Promise<BrowseSection[]> {
+  const home = await innertube.music.getHomeFeed();
+  const sections: BrowseSection[] = [];
+  for (const section of home.sections ?? []) {
+    if (section.type === "MusicShelf") {
+      const shelf = section as unknown as { title?: unknown; contents?: unknown[] };
+      const entries = normalizeEntries(shelf.contents);
+      if (entries.length > 0) sections.push({ title: textOf(shelf.title) || "Home", entries });
+    } else if (section.type === "MusicCarouselShelf") {
+      const carousel = section as unknown as { header?: { title?: unknown }; contents?: unknown[] };
+      const entries = normalizeEntries(carousel.contents);
+      if (entries.length > 0) {
+        sections.push({ title: textOf(carousel.header?.title) || "Home", entries });
+      }
+    }
+  }
+  return sections;
+}
+
 /** A playlist's tracklist (also covers albums - both are fetched via getPlaylist). */
 export async function getPlaylistTracks(innertube: Innertube, playlistId: string): Promise<BrowseEntry[]> {
   const playlist = await innertube.music.getPlaylist(playlistId);
