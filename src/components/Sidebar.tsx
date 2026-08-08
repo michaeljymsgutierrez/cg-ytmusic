@@ -1,23 +1,26 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { theme } from "../theme.js";
+import { ICON } from "../icons.js";
 
 export type Section = "library" | "queue" | "explore" | "favorites";
 
 export const SIDEBAR_SECTIONS: Section[] = ["library", "queue", "explore", "favorites"];
 
 const NAV_LABEL: Record<Section, string> = {
-  library: "LIBRARY",
-  queue: "QUEUE",
-  explore: "EXPLORE",
-  favorites: "FAVORITES",
+  library: "Library",
+  queue: "Queue",
+  explore: "Explore",
+  favorites: "Favorites",
 };
 
+// See src/icons.ts - Nerd Font glyphs, shared across every component so
+// selection markers/kind icons stay visually identical.
 const NAV_ICON: Record<Section, string> = {
-  library: "♫",
-  queue: "≡",
-  explore: "◎",
-  favorites: "♥",
+  library: ICON.headphones,
+  queue: ICON.list,
+  explore: ICON.compass,
+  favorites: ICON.star,
 };
 
 function NavRow({
@@ -33,10 +36,18 @@ function NavRow({
   focused: boolean;
   width: number;
 }): React.ReactElement {
-  const marker = active && focused ? "❯ " : "  ";
-  const text = `${marker}${icon} ${label}`.padEnd(width);
+  const marker = active && focused ? `${ICON.chevronRight} ` : "  ";
+  // 2-space gap after the icon, not 1 - some Nerd Font glyphs render with enough
+  // right-side bearing in Chael's terminal font that a single space visually
+  // reads as no gap at all (icon and label looked jammed together live).
+  const text = `${marker}${icon}  ${label}`.padEnd(width);
   return (
-    <Text backgroundColor={active ? theme.accent : undefined} color={active ? theme.bg : theme.fg} bold={active}>
+    <Text
+      backgroundColor={active ? theme.accent : undefined}
+      color={active ? theme.bg : theme.fg}
+      bold={active}
+      wrap="truncate-end"
+    >
       {text}
     </Text>
   );
@@ -75,7 +86,7 @@ export function Sidebar({
         width={width}
       />
       <Box marginTop={1}>
-        <Text color={theme.dim}>PLAYLISTS</Text>
+        <Text color={theme.dim}>Playlists</Text>
       </Box>
       <NavRow
         label={NAV_LABEL.favorites}
