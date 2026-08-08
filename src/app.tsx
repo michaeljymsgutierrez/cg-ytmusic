@@ -404,6 +404,7 @@ export function App({ version, player }: AppProps): React.ReactElement {
                 playback={playback}
                 queue={queue}
                 width={playerContentWidth}
+                height={dashboardRows - PANEL_BORDER_ROWS}
                 flashedControl={controlFlash?.control ?? null}
               />
             </Panel>
