@@ -12,6 +12,11 @@ export interface UsePlayerResult {
   position: number | null;
   /** Total track length in seconds; null until mpv reports one. */
   duration: number | null;
+  /** Live RMS loudness in dB (typically -60..0) from mpv's own audio pipeline - real
+   * signal, not synthetic. Null if unavailable (unsupported mpv build, or nothing
+   * loaded yet) - PlayerPanel's Visualizer falls back to a fixed synthetic amplitude
+   * when this is null, so it's never a hard requirement. */
+  audioLevel: number | null;
   error: string | null;
   play: (videoId: string, title: string) => void;
   togglePause: () => void;
@@ -30,6 +35,7 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
   const [title, setTitle] = useState<string | null>(null);
   const [position, setPosition] = useState<number | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
+  const [audioLevel, setAudioLevel] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,6 +54,7 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
       setStatus("ended");
       setPosition(null);
       setDuration(null);
+      setAudioLevel(null);
     };
     player.on("prop:pause", onPauseChange);
     player.on("end-file", onEndFile);
@@ -57,15 +64,25 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
     };
   }, [player]);
 
-  // Poll position/duration while something is loaded - mpv only pushes these on
-  // request, not as events, so periodic get_property is the simplest reliable option.
+  // Poll position/duration/audio-level while something is loaded - mpv only pushes
+  // these on request, not as events, so periodic get_property is the simplest
+  // reliable option. audioLevel rides this SAME interval rather than getting its own
+  // - this project already paid for one flicker incident (Ink redraws the whole
+  // frame on every state change) from an extra decorative-animation timer, so new
+  // periodic state is added to an existing interval whenever possible instead of a
+  // new one.
   useEffect(() => {
     if (status !== "playing" && status !== "paused") return;
     const poll = () => {
-      Promise.all([player.command(["get_property", "time-pos"]), player.command(["get_property", "duration"])])
-        .then(([pos, dur]) => {
+      Promise.all([
+        player.command(["get_property", "time-pos"]),
+        player.command(["get_property", "duration"]),
+        player.getAudioLevel(),
+      ])
+        .then(([pos, dur, level]) => {
           setPosition(typeof pos === "number" ? pos : null);
           setDuration(typeof dur === "number" ? dur : null);
+          setAudioLevel(level);
         })
         .catch(() => {});
     };
@@ -91,17 +108,32 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
     [player],
   );
 
-  const togglePause = useCallback(() => void player.togglePause(), [player]);
+  // mpv rejects commands like seek/cycle-pause when nothing is loaded ("error running
+  // command") - these all used to fire-and-forget with `void`, so that rejection was an
+  // unhandled promise rejection that crashed the whole process (confirmed live: pressing
+  // the seek key while idle killed the app). Guard the no-op case and catch the rest into
+  // `error` instead of letting anything reject uncaught.
+  const togglePause = useCallback(() => {
+    if (status === "idle") return;
+    player.togglePause().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  }, [player, status]);
   const stop = useCallback(() => {
-    void player.stop();
+    player.stop().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
     setStatus("idle");
     setVideoId(null);
     setTitle(null);
     setPosition(null);
     setDuration(null);
+    setAudioLevel(null);
   }, [player]);
-  const seekForward = useCallback(() => void player.seek(10), [player]);
-  const seekBackward = useCallback(() => void player.seek(-10), [player]);
+  const seekForward = useCallback(() => {
+    if (status === "idle") return;
+    player.seek(10).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  }, [player, status]);
+  const seekBackward = useCallback(() => {
+    if (status === "idle") return;
+    player.seek(-10).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  }, [player, status]);
 
   return {
     status,
@@ -109,6 +141,7 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
     title,
     position,
     duration,
+    audioLevel,
     error,
     play,
     togglePause,
