@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { theme } from "./theme.js";
 import { useAuth } from "./hooks/useAuth.js";
@@ -11,7 +11,7 @@ import { Panel } from "./components/Panel.js";
 import { Header } from "./components/Header.js";
 import { Sidebar, SIDEBAR_SECTIONS, type Section } from "./components/Sidebar.js";
 import { MainContent, mainContentChrome } from "./components/MainContent.js";
-import { PlayerPanel } from "./components/PlayerPanel.js";
+import { PlayerPanel, type FlashedControl } from "./components/PlayerPanel.js";
 import { Footer, footerLineCount, type Hint } from "./components/Footer.js";
 import {
   getArtistSections,
@@ -42,6 +42,8 @@ const HEADER_CHROME_ROWS = 2;
 const PANEL_BORDER_ROWS = 2;
 /** Border(1) + Panel's own paddingX(1) consumed on EACH side of a Panel's width. */
 const PANEL_HORIZONTAL_CHROME = 4;
+/** How long a Controls icon stays lime-highlighted after its hotkey is pressed. */
+const CONTROL_FLASH_MS = 400;
 
 const NEEDS_COOKIE_HINTS: Hint[] = [
   { key: "enter", label: "submit" },
@@ -105,6 +107,21 @@ export function App({ version, player }: AppProps): React.ReactElement {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [playAllError, setPlayAllError] = useState<string | null>(null);
   const [sectionError, setSectionError] = useState<string | null>(null);
+
+  // Drives PlayerPanel's Controls highlight: whichever icon's hotkey was actually
+  // just pressed lights up lime, then fades - a real "you pressed this" instead of a
+  // highlight permanently pinned to one button. `flashId` guards against a rapid
+  // second press clearing itself early (the stale timeout from the first press would
+  // otherwise null out the second press's still-active flash).
+  const [controlFlash, setControlFlash] = useState<{ control: FlashedControl; id: number } | null>(null);
+  const flashIdRef = useRef(0);
+  function flashControl(control: FlashedControl): void {
+    const id = ++flashIdRef.current;
+    setControlFlash({ control, id });
+    setTimeout(() => {
+      setControlFlash((cur) => (cur?.id === id ? null : cur));
+    }, CONTROL_FLASH_MS);
+  }
 
   const entries = browse.view?.sections.flatMap((s) => s.entries) ?? [];
   const activeListLength = section === "queue" ? queue.tracks.length : entries.length;
@@ -280,6 +297,7 @@ export function App({ version, player }: AppProps): React.ReactElement {
     }
     if (input === " ") {
       playback.togglePause();
+      flashControl("playPause");
       return;
     }
     if (input === "s") {
@@ -296,10 +314,12 @@ export function App({ version, player }: AppProps): React.ReactElement {
     }
     if (input === "n") {
       queue.playNext();
+      flashControl("next");
       return;
     }
     if (input === "N") {
       queue.playPrev();
+      flashControl("prev");
     }
   });
 
@@ -380,7 +400,12 @@ export function App({ version, player }: AppProps): React.ReactElement {
               />
             </Panel>
             <Panel title="PLAYER" width={playerBoxWidth} height={dashboardRows}>
-              <PlayerPanel playback={playback} queue={queue} width={playerContentWidth} />
+              <PlayerPanel
+                playback={playback}
+                queue={queue}
+                width={playerContentWidth}
+                flashedControl={controlFlash?.control ?? null}
+              />
             </Panel>
           </Box>
         </Box>
