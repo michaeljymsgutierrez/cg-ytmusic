@@ -36,7 +36,7 @@ export function QueuePreview({
         // budget approach, which the same overflow bug bit before this restyle.
         const durationBudget = duration ? duration.length + 1 : 0;
         const labelWidth = Math.max(5, width - durationBudget);
-        const label = `${index + 1}  ${track.title}${artist ? `  ${artist}` : ""}`;
+        const label = ` ${index + 1}. ${track.title}${artist ? `  ${artist}` : ""}`;
         // True inversion for the current track (black text on lime), matching
         // BrowseList's selected-row treatment - not just accent-colored text.
         return (
