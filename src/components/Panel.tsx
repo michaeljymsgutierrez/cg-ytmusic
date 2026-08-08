@@ -11,6 +11,10 @@ export interface PanelProps {
    * (border included) instead of hugging its content - for a main panel sitting above
    * a fixed-height panel (e.g. now-playing) that should stay pinned to the bottom. */
   grow?: boolean;
+  /** Fixed total height (border rows included) - for panels sitting side-by-side in a
+   * row, so their bottom borders all land on the same line instead of each hugging its
+   * own (possibly different) content height. */
+  height?: number;
   children: React.ReactNode;
 }
 
@@ -45,16 +49,23 @@ export function Panel({
   width,
   color = theme.dim,
   grow = false,
+  height,
   children,
 }: PanelProps): React.ReactElement {
+  // The hand-drawn top line is 1 row; when `height` is given, the bordered Box below
+  // gets the remaining rows (height - 1) so the whole Panel's total height matches
+  // exactly - it already omits its own top border (borderTop={false}) to avoid
+  // drawing the line twice, but still draws its own bottom border row.
+  const boxHeight = height !== undefined ? Math.max(1, height - 1) : undefined;
   return (
-    <Box flexDirection="column" flexGrow={grow ? 1 : 0}>
+    <Box flexDirection="column" flexGrow={grow ? 1 : 0} height={height}>
       <Text color={color}>{buildTopLine(title, rightLabel, width)}</Text>
       <Box
         borderStyle="single"
         borderTop={false}
         borderColor={color}
         width={width}
+        height={boxHeight}
         paddingX={1}
         flexDirection="column"
         flexGrow={grow ? 1 : 0}
