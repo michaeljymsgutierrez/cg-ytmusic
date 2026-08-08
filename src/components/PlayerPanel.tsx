@@ -6,9 +6,16 @@ import { ICON } from "../icons.js";
 import type { UsePlayerResult } from "../hooks/usePlayer.js";
 import type { UseQueueResult } from "../hooks/useQueue.js";
 
-const ART_WIDTH = 16; // outer box width, including its 2-column single-line border
+const ART_WIDTH = 22; // outer box width, including its 2-column single-line border
 const ART_CONTENT_WIDTH = ART_WIDTH - 2;
-const ART_HEIGHT = 4;
+const ART_MIN_HEIGHT = 6; // outer rows, including the 2-row border - matches the old fixed size
+// Measured directly from a live screenshot at the old 14-wide/7-tall content
+// grid (~362x456px rendered) - Chael's terminal draws character cells roughly
+// 2.5x taller than wide, not the 2x guessed at first (that guess produced a
+// visibly non-square box). A content grid reads as square when its row count
+// is roughly content_width / CELL_ASPECT.
+const CELL_ASPECT = 2.5;
+const ART_MAX_HEIGHT = Math.round(ART_CONTENT_WIDTH / CELL_ASPECT) + 2; // +2 for border rows
 const ART_GLYPHS = ["░", "▒", "▓"];
 // Previously every glyph shared one flat theme.border grey - against the near-black
 // background that read as nearly invisible. Denser glyphs (▓) get a lighter shade so
@@ -31,26 +38,51 @@ function hashOf(s: string): number {
   return h;
 }
 
-/** Deterministic (per track id, not random per render) ASCII placeholder in place of
+/** Deterministic-per-track (not random per render) ASCII placeholder in place of
  * real album art - no artwork data is fetched anywhere in this app. Rows are built at
  * ART_CONTENT_WIDTH (not the outer ART_WIDTH), since the single-line border already
  * consumes 2 of those columns - building at the outer width overflowed the interior
- * by 2 chars and wrapped the remainder onto a spurious extra line per row. */
-function AlbumArt({ trackId }: { trackId: string | null }): React.ReactElement {
+ * by 2 chars and wrapped the remainder onto a spurious extra line per row.
+ *
+ * `height` sizes the box to whatever vertical room PlayerPanel actually has (was a
+ * fixed 4-row constant, leaving most of a tall terminal as dead space above/below).
+ * `phase` (whole seconds of playback elapsed) shifts the pattern by one diagonal
+ * step per tick, so it visibly flows while playing instead of sitting static -
+ * riding usePlayer's EXISTING 1s position-poll interval rather than a new one
+ * (this project already paid for one flicker incident from an extra decorative
+ * timer, see PlayerPanel's old Visualizer). Paused/idle: `phase` stops advancing
+ * (mpv's own time-pos freezes), so the pattern freezes too, same as it always did. */
+function AlbumArt({
+  trackId,
+  width,
+  height,
+  phase,
+}: {
+  trackId: string | null;
+  width: number;
+  height: number;
+  phase: number;
+}): React.ReactElement {
+  // Clamped against the panel's real available width, not just ART_WIDTH -
+  // widening the target box (per Chael's "increase the width" ask) would
+  // otherwise overflow on a narrower terminal instead of degrading gracefully.
+  const outerWidth = Math.max(6, Math.min(ART_WIDTH, width));
+  const contentWidth = outerWidth - 2;
+  const contentHeight = Math.max(1, height - 2);
   const seed = hashOf(trackId ?? "idle");
   const rows: number[][] = [];
-  for (let y = 0; y < ART_HEIGHT; y++) {
+  for (let y = 0; y < contentHeight; y++) {
     const row: number[] = [];
-    for (let x = 0; x < ART_CONTENT_WIDTH; x++) {
-      row.push((seed + x * 7 + y * 13) % ART_GLYPHS.length);
+    for (let x = 0; x < contentWidth; x++) {
+      row.push((seed + x * 7 + y * 13 + phase) % ART_GLYPHS.length);
     }
     rows.push(row);
   }
-  const midRow = Math.floor(ART_HEIGHT / 2);
+  const midRow = Math.floor(contentHeight / 2);
   return (
     <Box
       flexDirection="column"
-      width={ART_WIDTH}
+      width={outerWidth}
       borderStyle="single"
       borderColor={theme.border}
       paddingX={0}
@@ -58,7 +90,7 @@ function AlbumArt({ trackId }: { trackId: string | null }): React.ReactElement {
       {rows.map((row, i) =>
         i === midRow ? (
           <Text key={i} color={theme.dim} wrap="truncate-end">
-            {ICON.music.padStart(Math.floor(ART_CONTENT_WIDTH / 2)).padEnd(ART_CONTENT_WIDTH)}
+            {ICON.music.padStart(Math.floor(contentWidth / 2)).padEnd(contentWidth)}
           </Text>
         ) : (
           <Box key={i}>
@@ -159,15 +191,22 @@ function Controls({
   );
 }
 
+// Everything in the column besides the art box and its variable artist line:
+// title(1) + gap before progress(1) + progress's own 2 rows (timestamps + bar) +
+// gap before controls(1) + controls(1).
+const NON_ART_ROWS = 6;
+
 export function PlayerPanel({
   playback,
   queue,
   width,
+  height,
   flashedControl,
 }: {
   playback: UsePlayerResult;
   queue: UseQueueResult;
   width: number;
+  height: number;
   flashedControl: FlashedControl;
 }): React.ReactElement {
   if (playback.status === "idle") {
@@ -180,6 +219,14 @@ export function PlayerPanel({
 
   const currentTrack = queue.tracks[queue.currentIndex];
   const { artist } = splitSubtitle(currentTrack?.subtitle);
+  // Grows the art box to soak up whatever vertical room is actually available
+  // (was a fixed 4 rows, leaving the rest of a tall terminal as dead margin
+  // above/below) rather than pinning it to a constant regardless of `height`.
+  const artHeight = Math.min(
+    ART_MAX_HEIGHT,
+    Math.max(ART_MIN_HEIGHT, height - NON_ART_ROWS - (artist ? 1 : 0)),
+  );
+  const phase = playback.position !== null ? Math.floor(playback.position) : 0;
 
   // flexGrow fills the full height the wrapping Panel gives this column (rather than
   // hugging content and leaving dead space below), justifyContent centers the whole
@@ -187,7 +234,7 @@ export function PlayerPanel({
   return (
     <Box flexDirection="column" flexGrow={1} width={width} justifyContent="center">
       <Box justifyContent="center">
-        <AlbumArt trackId={playback.videoId} />
+        <AlbumArt trackId={playback.videoId} width={width} height={artHeight} phase={phase} />
       </Box>
 
       <Box justifyContent="center" width={width}>
