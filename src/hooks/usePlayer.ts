@@ -12,11 +12,6 @@ export interface UsePlayerResult {
   position: number | null;
   /** Total track length in seconds; null until mpv reports one. */
   duration: number | null;
-  /** Live RMS loudness in dB (typically -60..0) from mpv's own audio pipeline - real
-   * signal, not synthetic. Null if unavailable (unsupported mpv build, or nothing
-   * loaded yet) - PlayerPanel's Visualizer falls back to a fixed synthetic amplitude
-   * when this is null, so it's never a hard requirement. */
-  audioLevel: number | null;
   error: string | null;
   play: (videoId: string, title: string) => void;
   togglePause: () => void;
@@ -35,7 +30,6 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
   const [title, setTitle] = useState<string | null>(null);
   const [position, setPosition] = useState<number | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
-  const [audioLevel, setAudioLevel] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,7 +48,6 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
       setStatus("ended");
       setPosition(null);
       setDuration(null);
-      setAudioLevel(null);
     };
     player.on("prop:pause", onPauseChange);
     player.on("end-file", onEndFile);
@@ -64,25 +57,15 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
     };
   }, [player]);
 
-  // Poll position/duration/audio-level while something is loaded - mpv only pushes
-  // these on request, not as events, so periodic get_property is the simplest
-  // reliable option. audioLevel rides this SAME interval rather than getting its own
-  // - this project already paid for one flicker incident (Ink redraws the whole
-  // frame on every state change) from an extra decorative-animation timer, so new
-  // periodic state is added to an existing interval whenever possible instead of a
-  // new one.
+  // Poll position/duration while something is loaded - mpv only pushes these on
+  // request, not as events, so periodic get_property is the simplest reliable option.
   useEffect(() => {
     if (status !== "playing" && status !== "paused") return;
     const poll = () => {
-      Promise.all([
-        player.command(["get_property", "time-pos"]),
-        player.command(["get_property", "duration"]),
-        player.getAudioLevel(),
-      ])
-        .then(([pos, dur, level]) => {
+      Promise.all([player.command(["get_property", "time-pos"]), player.command(["get_property", "duration"])])
+        .then(([pos, dur]) => {
           setPosition(typeof pos === "number" ? pos : null);
           setDuration(typeof dur === "number" ? dur : null);
-          setAudioLevel(level);
         })
         .catch(() => {});
     };
@@ -124,7 +107,6 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
     setTitle(null);
     setPosition(null);
     setDuration(null);
-    setAudioLevel(null);
   }, [player]);
   const seekForward = useCallback(() => {
     if (status === "idle") return;
@@ -141,7 +123,6 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
     title,
     position,
     duration,
-    audioLevel,
     error,
     play,
     togglePause,
