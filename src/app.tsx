@@ -6,11 +6,12 @@ import { usePlayer } from "./hooks/usePlayer.js";
 import { useBrowse } from "./hooks/useBrowse.js";
 import { useQueue } from "./hooks/useQueue.js";
 import { CookiePrompt } from "./components/CookiePrompt.js";
-import { BrowseList } from "./components/BrowseList.js";
-import { DetailPane } from "./components/DetailPane.js";
-import { NowPlaying, nowPlayingRows } from "./components/NowPlaying.js";
 import { SearchInput } from "./components/SearchInput.js";
 import { Panel } from "./components/Panel.js";
+import { Header } from "./components/Header.js";
+import { Sidebar, SIDEBAR_SECTIONS, type Section } from "./components/Sidebar.js";
+import { MainContent, mainContentChrome } from "./components/MainContent.js";
+import { PlayerPanel } from "./components/PlayerPanel.js";
 import { Footer, footerLineCount, type Hint } from "./components/Footer.js";
 import {
   getArtistSections,
@@ -31,11 +32,16 @@ export interface AppProps {
 
 /** Rows the chrome always occupies besides any panel's own content: outer padding (2)
  * and the margin above the footer (1). The footer's own (variable, can wrap) height,
- * the main panel's border, the now-playing panel (border + variable content height),
- * and the play-all error line are all added on top of this separately. */
+ * the auth-flow Panel's border, and the top error line are all added on top of this
+ * separately. */
 const FIXED_CHROME_ROWS = 3;
-/** Top+bottom border rows a Panel always adds around its content. */
+/** Header's own rows: the stat/brand line plus its bottom divider border. */
+const HEADER_CHROME_ROWS = 2;
+/** Top+bottom border rows a Panel always adds around its content - the dashboard's
+ * three columns (Sidebar/MainContent/PlayerPanel) are each wrapped in one. */
 const PANEL_BORDER_ROWS = 2;
+/** Border(1) + Panel's own paddingX(1) consumed on EACH side of a Panel's width. */
+const PANEL_HORIZONTAL_CHROME = 4;
 
 const NEEDS_COOKIE_HINTS: Hint[] = [
   { key: "enter", label: "submit" },
@@ -47,10 +53,10 @@ const SEARCH_HINTS: Hint[] = [
 ];
 const BROWSE_HINTS: Hint[] = [
   { key: "j/k", label: "move" },
+  { key: "tab", label: "sidebar" },
   { key: "enter", label: "select" },
   { key: "p", label: "play all" },
   { key: "/", label: "search" },
-  { key: "h", label: "home" },
   { key: "bksp", label: "back" },
   { key: "space", label: "pause" },
   { key: "f/b", label: "seek" },
@@ -69,12 +75,14 @@ async function fetchPlayAllQueue(
   if (!entry.id) return [];
   if (entry.kind === "playlist" || entry.kind === "album") {
     const tracks = await getPlaylistTracks(innertube, entry.id);
-    return playableEntries(tracks).map((e) => ({ id: e.id!, title: e.title }));
+    return playableEntries(tracks).map((e) => ({ id: e.id!, title: e.title, subtitle: e.subtitle }));
   }
   if (entry.kind === "artist") {
     const sections = await getArtistSections(innertube, entry.id);
     const withSongs = sections.find((s) => playableEntries(s.entries).length > 0);
-    return withSongs ? playableEntries(withSongs.entries).map((e) => ({ id: e.id!, title: e.title })) : [];
+    return withSongs
+      ? playableEntries(withSongs.entries).map((e) => ({ id: e.id!, title: e.title, subtitle: e.subtitle }))
+      : [];
   }
   return [];
 }
@@ -88,18 +96,55 @@ export function App({ version, player }: AppProps): React.ReactElement {
   const browse = useBrowse(authStatus === "signed-in" ? innertube : null);
   const [selected, setSelected] = useState(0);
 
+  const [section, setSection] = useState<Section>("library");
+  const [sidebarFocused, setSidebarFocused] = useState(false);
+
   const [uiMode, setUiMode] = useState<"browse" | "search">("browse");
   const [searchBuffer, setSearchBuffer] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [playAllError, setPlayAllError] = useState<string | null>(null);
-  const [homeError, setHomeError] = useState<string | null>(null);
+  const [sectionError, setSectionError] = useState<string | null>(null);
 
   const entries = browse.view?.sections.flatMap((s) => s.entries) ?? [];
+  const activeListLength = section === "queue" ? queue.tracks.length : entries.length;
+
+  // Each sidebar section owns what the browse stack should show - Library resets to
+  // root, Explore/Favorites fetch+push their content, Queue needs no browse data at
+  // all (MainContent reads straight off useQueue). Runs on mount too (section starts
+  // "library"), which is a harmless no-op goToRoot on an empty/root-only stack.
+  useEffect(() => {
+    if (authStatus !== "signed-in" || !innertube) return;
+    setSectionError(null);
+    if (section === "library") {
+      browse.goToRoot();
+    } else if (section === "explore") {
+      getHomeSections(innertube)
+        .then((sections) => browse.openResults("Home", sections))
+        .catch((e: unknown) => setSectionError(e instanceof Error ? e.message : String(e)));
+    } else if (section === "favorites") {
+      const liked = browse.root?.sections.flatMap((s) => s.entries).find((e) => /liked/i.test(e.title));
+      if (liked) {
+        browse.goToRoot();
+        browse.open(liked);
+      } else {
+        setSectionError("No favorites found.");
+      }
+    }
+    // Only re-runs on a section/auth/innertube change, not every browse-stack mutation
+    // this effect itself triggers - browse's methods are individually memoized so the
+    // closure stays correct even though the `browse` object literal is new each render.
+  }, [section, authStatus, innertube]);
 
   useEffect(() => {
-    setSelected((s) => (entries.length === 0 ? 0 : Math.min(s, entries.length - 1)));
-  }, [entries.length]);
+    // Only reacts to a section switch, not to queue.currentIndex ticking while already
+    // parked on the Queue section (that would fight manual selection).
+    setSelected(section === "queue" ? Math.max(0, queue.currentIndex) : 0);
+  }, [section]);
+
+  useEffect(() => {
+    setSelected((s) => (activeListLength === 0 ? 0 : Math.min(s, activeListLength - 1)));
+  }, [activeListLength]);
 
   const [, setResizeTick] = useState(0);
   useEffect(() => {
@@ -169,12 +214,26 @@ export function App({ version, player }: AppProps): React.ReactElement {
       exit();
       return;
     }
+    if (key.tab) {
+      setSidebarFocused((f) => !f);
+      return;
+    }
     if (key.downArrow || input === "j") {
-      setSelected((s) => Math.min(s + 1, Math.max(0, entries.length - 1)));
+      if (sidebarFocused) {
+        setSection((s) => SIDEBAR_SECTIONS[(SIDEBAR_SECTIONS.indexOf(s) + 1) % SIDEBAR_SECTIONS.length]);
+      } else {
+        setSelected((s) => Math.min(s + 1, Math.max(0, activeListLength - 1)));
+      }
       return;
     }
     if (key.upArrow || input === "k") {
-      setSelected((s) => Math.max(s - 1, 0));
+      if (sidebarFocused) {
+        setSection(
+          (s) => SIDEBAR_SECTIONS[(SIDEBAR_SECTIONS.indexOf(s) - 1 + SIDEBAR_SECTIONS.length) % SIDEBAR_SECTIONS.length],
+        );
+      } else {
+        setSelected((s) => Math.max(s - 1, 0));
+      }
       return;
     }
     if (input === "/") {
@@ -183,17 +242,15 @@ export function App({ version, player }: AppProps): React.ReactElement {
       setUiMode("search");
       return;
     }
-    if (input === "h") {
-      if (!innertube) return;
-      setHomeError(null);
-      getHomeSections(innertube)
-        .then((sections) => browse.openResults("Home", sections))
-        .catch((e: unknown) => {
-          setHomeError(e instanceof Error ? e.message : String(e));
-        });
-      return;
-    }
     if (key.return) {
+      if (sidebarFocused) {
+        setSidebarFocused(false);
+        return;
+      }
+      if (section === "queue") {
+        if (queue.tracks.length > 0) queue.playQueue(queue.tracks, selected);
+        return;
+      }
       const entry = entries[selected];
       if (!entry) return;
       if (entry.kind === "song" || entry.kind === "video") {
@@ -204,7 +261,7 @@ export function App({ version, player }: AppProps): React.ReactElement {
       }
       return;
     }
-    if (input === "p") {
+    if (input === "p" && section !== "queue") {
       const entry = entries[selected];
       if (!entry || !innertube) return;
       setPlayAllError(null);
@@ -217,7 +274,7 @@ export function App({ version, player }: AppProps): React.ReactElement {
         });
       return;
     }
-    if ((key.backspace || key.delete || key.escape) && browse.canGoBack) {
+    if (section !== "queue" && (key.backspace || key.delete || key.escape) && browse.canGoBack) {
       browse.goBack();
       return;
     }
@@ -249,83 +306,84 @@ export function App({ version, player }: AppProps): React.ReactElement {
   const termRows = process.stdout.rows ?? 24;
   const termCols = process.stdout.columns ?? 80;
   const panelWidth = termCols - 2; // outer app padding (1 each side)
-  // Border (2 chars) + Panel's own paddingX (2 chars) on top of the panel width.
-  const panelContentWidth = panelWidth - 4;
-  // Split-pane: list on the left, DetailPane on the right with its own left border.
-  const listWidth = Math.max(20, Math.floor(panelContentWidth * 0.6));
-  const detailBoxWidth = Math.max(10, panelContentWidth - listWidth);
-  const detailContentWidth = Math.max(5, detailBoxWidth - 2); // border(1) + paddingLeft(1)
 
-  const topError = playAllError ?? homeError;
+  // Signed-in dashboard columns: Sidebar (fixed) | MainContent (flex) | PlayerPanel
+  // (fixed) - each wrapped in its own bordered Panel, so `width` here is the OUTER
+  // panel width; every Panel consumes PANEL_HORIZONTAL_CHROME (border+paddingX on
+  // both sides) before its child sees any content width.
+  const sidebarWidth = Math.max(18, Math.floor(panelWidth * 0.2));
+  const playerBoxWidth = Math.max(28, Math.floor(panelWidth * 0.32));
+  const mainWidth = Math.max(24, panelWidth - sidebarWidth - playerBoxWidth);
+  const sidebarContentWidth = Math.max(10, sidebarWidth - PANEL_HORIZONTAL_CHROME);
+  const mainContentWidth = Math.max(10, mainWidth - PANEL_HORIZONTAL_CHROME);
+  const playerContentWidth = Math.max(10, playerBoxWidth - PANEL_HORIZONTAL_CHROME);
+
+  const topError = playAllError ?? sectionError;
   const activeHints =
     authStatus === "needs-cookie" ? NEEDS_COOKIE_HINTS : uiMode === "search" ? SEARCH_HINTS : BROWSE_HINTS;
   const footerRows = footerLineCount(activeHints, termCols - 2);
-
-  // The now-playing panel's own border rows plus its variable content height only
-  // apply once signed in; the top error line only exists when set. Both are variable,
-  // so both must be subtracted here to match what's actually rendered.
-  const nowPlayingChrome =
-    authStatus === "signed-in" ? PANEL_BORDER_ROWS + nowPlayingRows(playback) : 0;
   const errorChrome = topError ? 1 : 0;
-  const maxRows = Math.max(
+
+  const dashboardRows = Math.max(
     1,
-    termRows - FIXED_CHROME_ROWS - PANEL_BORDER_ROWS - nowPlayingChrome - errorChrome - footerRows,
+    termRows - FIXED_CHROME_ROWS - HEADER_CHROME_ROWS - errorChrome - footerRows,
+  );
+  const mainContentRows = Math.max(
+    1,
+    dashboardRows - PANEL_BORDER_ROWS - mainContentChrome(section, queue.tracks.length),
   );
 
-  const selectedEntry = entries[selected] ?? null;
+  const mainPanelTitle =
+    section === "queue" ? "QUEUE" : (browse.view?.title.toUpperCase() ?? "LIBRARY");
 
   return (
     <Box flexDirection="column" height={termRows} width={termCols} padding={1} overflow="hidden">
       {topError && <Text color={theme.red}>{`Couldn't do that: ${topError}`}</Text>}
 
-      <Panel title="cg-ytmusic" rightLabel={`v${version}`} width={panelWidth} grow>
-        {authStatus === "checking" && <Text color={theme.yellow}>Checking saved sign-in...</Text>}
-
-        {authStatus === "needs-cookie" && <CookiePrompt value={cookieBuffer} error={authError} />}
-
-        {authStatus === "verifying" && <Text color={theme.yellow}>Verifying...</Text>}
-
-        {authStatus === "signed-in" && uiMode === "search" && (
-          <SearchInput value={searchBuffer} loading={searchLoading} error={searchError} />
-        )}
-
-        {authStatus === "signed-in" &&
-          uiMode === "browse" &&
-          (browse.loading && !browse.view ? (
-            <Text color={theme.yellow}>Loading your library...</Text>
-          ) : browse.error ? (
-            <Text color={theme.red}>{`Error: ${browse.error}`}</Text>
-          ) : browse.view ? (
-            <Box flexDirection="row">
-              <Box width={listWidth} flexDirection="column">
-                <BrowseList
-                  sections={browse.view.sections}
-                  selectedIndex={selected}
-                  maxRows={maxRows}
-                  width={listWidth}
-                  showSubtitle={false}
-                />
-              </Box>
-              <Box
-                borderStyle="single"
-                borderTop={false}
-                borderBottom={false}
-                borderRight={false}
-                borderColor={theme.dim}
-                paddingLeft={1}
-                width={detailBoxWidth}
-                flexDirection="column"
-              >
-                <DetailPane entry={selectedEntry} width={detailContentWidth} />
-              </Box>
-            </Box>
-          ) : null)}
-      </Panel>
-
-      {authStatus === "signed-in" && (
-        <Panel title="Now Playing" width={panelWidth}>
-          <NowPlaying playback={playback} queue={queue} />
+      {authStatus !== "signed-in" ? (
+        <Panel title="cg-ytmusic" rightLabel={`v${version}`} width={panelWidth} grow>
+          {authStatus === "checking" && <Text color={theme.yellow}>Checking saved sign-in...</Text>}
+          {authStatus === "needs-cookie" && <CookiePrompt value={cookieBuffer} error={authError} />}
+          {authStatus === "verifying" && <Text color={theme.yellow}>Verifying...</Text>}
         </Panel>
+      ) : uiMode === "search" ? (
+        <Panel title="Search" rightLabel={`v${version}`} width={panelWidth} grow>
+          <SearchInput value={searchBuffer} loading={searchLoading} error={searchError} />
+        </Panel>
+      ) : (
+        <Box flexDirection="column" width={panelWidth} height={dashboardRows + HEADER_CHROME_ROWS}>
+          <Box
+            width={panelWidth}
+            borderStyle="single"
+            borderTop={false}
+            borderLeft={false}
+            borderRight={false}
+            borderColor={theme.border}
+            paddingBottom={0}
+          >
+            <Header brand="cg-ytmusic" width={panelWidth} />
+          </Box>
+          <Box flexDirection="row" width={panelWidth}>
+            <Panel title="MENU" width={sidebarWidth} height={dashboardRows}>
+              <Sidebar section={section} focused={sidebarFocused} width={sidebarContentWidth} />
+            </Panel>
+            <Panel title={mainPanelTitle} width={mainWidth} height={dashboardRows}>
+              <MainContent
+                section={section}
+                browseView={browse.view}
+                browseLoading={browse.loading}
+                browseError={browse.error}
+                selected={selected}
+                queue={queue}
+                maxRows={mainContentRows}
+                width={mainContentWidth}
+              />
+            </Panel>
+            <Panel title="PLAYER" width={playerBoxWidth} height={dashboardRows}>
+              <PlayerPanel playback={playback} queue={queue} width={playerContentWidth} />
+            </Panel>
+          </Box>
+        </Box>
       )}
 
       <Box marginTop={1}>
