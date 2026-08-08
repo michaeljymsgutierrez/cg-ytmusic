@@ -4,6 +4,8 @@ import type { UsePlayerResult } from "./usePlayer.js";
 export interface QueueTrack {
   id: string;
   title: string;
+  /** BrowseEntry.subtitle (artist + duration text) for display in QueuePreview/PlayerPanel. */
+  subtitle?: string;
 }
 
 export interface UseQueueResult {
