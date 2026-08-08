@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import { theme } from "../theme.js";
 import { splitSubtitle } from "../library.js";
+import { ICON } from "../icons.js";
 import type { UsePlayerResult } from "../hooks/usePlayer.js";
 import type { UseQueueResult } from "../hooks/useQueue.js";
 
@@ -57,7 +58,7 @@ function AlbumArt({ trackId }: { trackId: string | null }): React.ReactElement {
       {rows.map((row, i) =>
         i === midRow ? (
           <Text key={i} color={theme.dim} wrap="truncate-end">
-            {"♫".padStart(Math.floor(ART_CONTENT_WIDTH / 2)).padEnd(ART_CONTENT_WIDTH)}
+            {ICON.music.padStart(Math.floor(ART_CONTENT_WIDTH / 2)).padEnd(ART_CONTENT_WIDTH)}
           </Text>
         ) : (
           <Box key={i}>
@@ -102,23 +103,32 @@ function ProgressBar({
 export type FlashedControl = "prev" | "playPause" | "next" | null;
 
 /** Both the flashed and idle style render the glyph with the same `" x "` padding -
- * only color/background/bold change - so a flash never resizes the row (a resize
- * mid-flash would shift the whole centered group, the same class of jitter this
- * component's centering has been bitten by before). */
+ * only the icon's own color/bold changes - so a flash never resizes the row (a
+ * resize mid-flash would shift the whole centered group, the same class of
+ * jitter this component's centering has been bitten by before). */
 function ControlIcon({ glyph, flashed }: { glyph: string; flashed: boolean }): React.ReactElement {
   return (
-    <Text color={flashed ? theme.bg : theme.fg} backgroundColor={flashed ? theme.accent : undefined} bold={flashed}>
+    <Text color={flashed ? theme.accent : theme.fg} bold={flashed}>
       {` ${glyph} `}
     </Text>
   );
 }
 
-/** Each icon is its own Box with marginRight for spacing (Yoga measures the actual
- * rendered width of each), rather than one joined string hand-padded with literal
- * spaces - that approach assumed every glyph renders at a known column width, which
- * doesn't hold for these Unicode media-control glyphs (some terminals render them
- * wide), and produced a control row that wasn't actually centered under the album
- * art / progress bar despite being wrapped in `justifyContent="center"`. No shuffle
+// " X " (prev) + 1-space gap + " X " (playPause) + 1-space gap + " X " (next),
+// assuming each icon renders at exactly 1 column (Nerd Font's whole design
+// promise). Both gaps must match - an earlier version only had the gap before
+// Play/Pause (3 spaces there vs 2 after it), a real asymmetry live-confirmed by
+// a screenshot before this fix.
+const CONTROLS_CONTENT_WIDTH = 11;
+
+/** Previously used `justifyContent="center"` and let Yoga measure each icon's
+ * rendered width to center the row as a group - that broke (control row visibly
+ * off-center vs album art/progress bar) once the icons became Nerd Font
+ * Private-Use-Area glyphs, which Yoga doesn't reliably measure the same way it
+ * measures ordinary Unicode text. Centering is now computed explicitly (leading
+ * spaces sized from `width` and the row's known fixed content width) instead of
+ * trusting Yoga to auto-measure PUA glyphs - the same manual-centering approach
+ * BrowseList/Sidebar already use successfully for exactly this reason. No shuffle
  * or repeat glyph - both were mocked visual-only toggles with no real effect on
  * playback, which read as broken/misleading controls rather than decorative, so
  * they were removed entirely (`shuffleOn` earlier, `repeatOn` here) rather than kept
@@ -135,16 +145,16 @@ function Controls({
   width: number;
   flashed: FlashedControl;
 }): React.ReactElement {
-  const playPauseGlyph = status === "playing" ? "⏸" : "▶";
+  const playPauseGlyph = status === "playing" ? ICON.pause : ICON.play;
+  const leftPad = Math.max(0, Math.floor((width - CONTROLS_CONTENT_WIDTH) / 2));
   return (
-    <Box justifyContent="center" width={width}>
-      <Box marginRight={1}>
-        <ControlIcon glyph="⏮" flashed={flashed === "prev"} />
-      </Box>
+    <Box>
+      <Text>{" ".repeat(leftPad)}</Text>
+      <ControlIcon glyph={ICON.stepBackward} flashed={flashed === "prev"} />
+      <Text> </Text>
       <ControlIcon glyph={playPauseGlyph} flashed={flashed === "playPause"} />
-      <Box>
-        <ControlIcon glyph="⏭" flashed={flashed === "next"} />
-      </Box>
+      <Text> </Text>
+      <ControlIcon glyph={ICON.stepForward} flashed={flashed === "next"} />
     </Box>
   );
 }
@@ -199,7 +209,7 @@ export function PlayerPanel({
         </Box>
       )}
 
-      <Box justifyContent="center" width={width} marginTop={1}>
+      <Box marginTop={1}>
         <Controls status={playback.status} width={width} flashed={flashedControl} />
       </Box>
 
