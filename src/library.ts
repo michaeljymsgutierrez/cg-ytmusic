@@ -87,6 +87,21 @@ export async function getLibrarySections(innertube: Innertube): Promise<BrowseSe
   return sections;
 }
 
+const DURATION_RE = /^\d+:\d{2}$/;
+
+/** BrowseEntry.subtitle is built as "Artist • 3:45" (duration only appended for
+ * song/video kind, see normalizeEntry above) - split it back apart for display rather
+ * than re-deriving it from raw data a second time. */
+export function splitSubtitle(subtitle: string | undefined): { artist: string; duration: string | null } {
+  if (!subtitle) return { artist: "", duration: null };
+  const parts = subtitle.split(" • ").filter(Boolean);
+  const last = parts[parts.length - 1];
+  if (last && DURATION_RE.test(last)) {
+    return { artist: parts.slice(0, -1).join(" • "), duration: last };
+  }
+  return { artist: subtitle, duration: null };
+}
+
 /** Only the entries playable as audio tracks (songs/videos), in their original order -
  * used to build a play queue from a mixed section (e.g. a playlist's tracklist, or the
  * subset of a browse view that's actually queueable). */
@@ -97,6 +112,8 @@ export function playableEntries(entries: BrowseEntry[]): BrowseEntry[] {
 export interface QueueTrack {
   id: string;
   title: string;
+  /** BrowseEntry.subtitle (artist + duration text) for display in QueuePreview/PlayerPanel. */
+  subtitle?: string;
 }
 
 /**
@@ -121,7 +138,10 @@ export function queueFromSelection(
     if (selected.kind !== "song" && selected.kind !== "video") return null;
     const playable = playableEntries(section.entries);
     const startIndex = playableEntries(section.entries.slice(0, localIndex + 1)).length - 1;
-    return { tracks: playable.map((e) => ({ id: e.id!, title: e.title })), startIndex };
+    return {
+      tracks: playable.map((e) => ({ id: e.id!, title: e.title, subtitle: e.subtitle })),
+      startIndex,
+    };
   }
   return null;
 }
