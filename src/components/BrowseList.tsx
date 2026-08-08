@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Text } from "ink";
 import { theme } from "../theme.js";
 import { windowFor } from "../window.js";
+import { ICON } from "../icons.js";
 import type { BrowseEntry, BrowseSection } from "../library.js";
 
 export interface BrowseListProps {
@@ -14,18 +15,20 @@ export interface BrowseListProps {
   showSubtitle?: boolean;
 }
 
-// Tree-view vocabulary: ▷ marks a "folder" (something you open into another view -
-// artist/album), ≡ a playlist specifically, ♫ an actual playable track (song/video -
-// not visually distinguished from each other, the spec doesn't call for that). "▷" is
-// deliberately NOT the selection marker (▶, filled) - this is the hollow/outline
-// variant, so an unselected folder row can't be confused with a selected one.
+// A distinct icon for actual playable tracks (song/video) vs everything else
+// (artist/album/playlist, all "things you navigate into" rather than play
+// directly) - reinstated per-kind distinction now that Nerd Font icons render
+// at a consistent weight/width, unlike the plain-Unicode glyphs that motivated
+// collapsing this to one shared glyph earlier. Deliberately NOT the selection
+// marker (also from icons.ts), so an unselected row can't be confused with a
+// selected one.
 const KIND_GLYPH: Record<BrowseEntry["kind"], string> = {
-  song: "♫",
-  video: "♫",
-  playlist: "≡",
-  artist: "▷",
-  album: "▷",
-  unknown: "?",
+  song: ICON.music,
+  video: ICON.music,
+  playlist: ICON.list,
+  artist: ICON.microphone,
+  album: ICON.microphone,
+  unknown: ICON.microphone,
 };
 
 interface FlatRow {
@@ -47,10 +50,13 @@ function fit(s: string, w: number): string {
   return s.length > w ? s.slice(0, Math.max(0, w - 1)) + "…" : s;
 }
 
-// Fixed-width cells: the "❯ " / "  " selection marker, the one-glyph kind marker plus
-// its trailing space, and the subtitle. The title flexes to fill whatever is left.
+// Fixed-width cells: the selection-marker column, the one-glyph kind marker plus
+// its trailing gap, and the subtitle. The title flexes to fill whatever is left.
 const MARKER_WIDTH = 2;
-const GLYPH_WIDTH = 2;
+// 2-space gap after the kind glyph, not 1 - matches Sidebar's fix for the same
+// Nerd Font right-side-bearing issue (icon and title looked jammed together
+// live with only 1 space).
+const GLYPH_WIDTH = 3;
 const SUBTITLE_WIDTH = 28;
 
 function EntryRow({
@@ -74,13 +80,15 @@ function EntryRow({
   return (
     <Text backgroundColor={selected ? theme.accent : undefined} wrap="truncate-end">
       <Text color={textColor} bold>
-        {selected ? "▶ " : "  "}
+        {selected ? `${ICON.chevronRight} ` : "  "}
       </Text>
-      <Text color={dimColor}>{KIND_GLYPH[entry.kind] + " "}</Text>
+      <Text color={dimColor}>{KIND_GLYPH[entry.kind] + "  "}</Text>
       <Text color={textColor} bold={selected}>
-        {showSubtitle ? fit(entry.title, titleWidth).padEnd(titleWidth) : fit(entry.title, titleWidth)}
+        {fit(entry.title, titleWidth).padEnd(titleWidth)}
       </Text>
-      {showSubtitle && <Text color={dimColor}>{" " + fit(entry.subtitle, SUBTITLE_WIDTH)}</Text>}
+      {showSubtitle && (
+        <Text color={dimColor}>{" " + fit(entry.subtitle, SUBTITLE_WIDTH).padEnd(SUBTITLE_WIDTH)}</Text>
+      )}
     </Text>
   );
 }
