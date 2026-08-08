@@ -9,6 +9,10 @@ export interface BrowseView {
 
 export interface UseBrowseResult {
   view: BrowseView | null;
+  /** The library root view (stack[0]), regardless of how deep the current view is -
+   * for the Favorites sidebar item, which needs to find "Liked Music" independent of
+   * wherever the user is currently browsing. */
+  root: BrowseView | null;
   loading: boolean;
   error: string | null;
   canGoBack: boolean;
@@ -18,6 +22,8 @@ export interface UseBrowseResult {
   /** Pushes an already-fetched view (e.g. search results) onto the same stack. */
   openResults: (title: string, sections: BrowseSection[]) => void;
   goBack: () => void;
+  /** Collapses the stack back to the library root - for the Library sidebar item. */
+  goToRoot: () => void;
 }
 
 /** Drives the library -> playlist/artist detail navigation stack. The library root is
@@ -83,13 +89,19 @@ export function useBrowse(innertube: Innertube | null): UseBrowseResult {
     setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
   }, []);
 
+  const goToRoot = useCallback(() => {
+    setStack((s) => (s.length > 1 ? s.slice(0, 1) : s));
+  }, []);
+
   return {
     view: stack.length > 0 ? stack[stack.length - 1] : null,
+    root: stack.length > 0 ? stack[0] : null,
     loading,
     error,
     canGoBack: stack.length > 1,
     open,
     openResults,
     goBack,
+    goToRoot,
   };
 }
