@@ -10,27 +10,22 @@ export interface BrowseListProps {
   selectedIndex: number;
   maxRows: number;
   width: number;
-  /** Hide the subtitle column - for the split-pane layout, where DetailPane already
-   * shows that info for whichever row is selected. */
+  /** Hide the subtitle column on narrower layouts. */
   showSubtitle?: boolean;
 }
 
+// Tree-view vocabulary: ▷ marks a "folder" (something you open into another view -
+// artist/album), ≡ a playlist specifically, ♫ an actual playable track (song/video -
+// not visually distinguished from each other, the spec doesn't call for that). "▷" is
+// deliberately NOT the selection marker (▶, filled) - this is the hollow/outline
+// variant, so an unselected folder row can't be confused with a selected one.
 const KIND_GLYPH: Record<BrowseEntry["kind"], string> = {
-  song: "♪",
-  video: "▶",
+  song: "♫",
+  video: "♫",
   playlist: "≡",
-  artist: "★",
-  album: "◆",
+  artist: "▷",
+  album: "▷",
   unknown: "?",
-};
-
-const KIND_COLOR: Record<BrowseEntry["kind"], string> = {
-  song: theme.green,
-  video: theme.cyan,
-  playlist: theme.yellow,
-  artist: theme.purple,
-  album: theme.orange,
-  unknown: theme.dim,
 };
 
 interface FlatRow {
@@ -71,16 +66,21 @@ function EntryRow({
 }): React.ReactElement {
   const subtitleBudget = showSubtitle ? 1 + SUBTITLE_WIDTH : 0;
   const titleWidth = Math.max(10, width - MARKER_WIDTH - GLYPH_WIDTH - subtitleBudget);
+  // True inversion for the active row (black text on lime), not just lime-colored text
+  // on a dark background - every span in the row must switch to the inverted (bg) text
+  // color when selected, or lime-on-lime would render invisible.
+  const textColor = selected ? theme.bg : theme.fg;
+  const dimColor = selected ? theme.bg : theme.dim;
   return (
-    <Text backgroundColor={selected ? theme.selectionBg : undefined} wrap="truncate-end">
-      <Text color={theme.green} bold>
-        {selected ? "❯ " : "  "}
+    <Text backgroundColor={selected ? theme.accent : undefined} wrap="truncate-end">
+      <Text color={textColor} bold>
+        {selected ? "▶ " : "  "}
       </Text>
-      <Text color={KIND_COLOR[entry.kind]}>{KIND_GLYPH[entry.kind] + " "}</Text>
-      <Text color={selected ? theme.cyan : theme.fg} bold={selected}>
+      <Text color={dimColor}>{KIND_GLYPH[entry.kind] + " "}</Text>
+      <Text color={textColor} bold={selected}>
         {showSubtitle ? fit(entry.title, titleWidth).padEnd(titleWidth) : fit(entry.title, titleWidth)}
       </Text>
-      {showSubtitle && <Text color={theme.dim}>{" " + fit(entry.subtitle, SUBTITLE_WIDTH)}</Text>}
+      {showSubtitle && <Text color={dimColor}>{" " + fit(entry.subtitle, SUBTITLE_WIDTH)}</Text>}
     </Text>
   );
 }
