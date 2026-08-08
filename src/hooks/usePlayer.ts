@@ -20,7 +20,20 @@ export interface UsePlayerResult {
   seekBackward: () => void;
 }
 
-const POSITION_POLL_MS = 1000;
+// Reconciliation only, not the primary driver of the displayed position anymore
+// (see the local tick effect below) - tightening this alone (tried 1000ms then
+// 500ms) still felt laggy, because every poll round-trips over the mpv IPC
+// socket, and that latency doesn't go away just by polling more often. 2000ms
+// is a real players' compromise: poll rarely for the authoritative time-pos/
+// duration to drift-correct, while the local tick supplies the actual
+// per-second smoothness.
+const POSITION_POLL_MS = 2000;
+// Ticks `position` forward locally once a second while playing, independent of
+// the IPC poll's round-trip timing entirely - this is what actually makes the
+// clock feel realtime (same technique real media players use: a local ticking
+// clock reconciled periodically against the source of truth, not polling faster
+// and faster hoping round-trip latency disappears).
+const POSITION_TICK_MS = 1000;
 
 /** Wraps an MpvClient with React state: resolves a video id via yt-dlp, loads it into
  * mpv, and tracks status from mpv's own pause-property and end-file events. */
@@ -74,6 +87,18 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
     return () => clearInterval(t);
   }, [player, status]);
 
+  // Local realtime tick - only while actually playing (not paused, matching
+  // mpv's own time-pos, which doesn't advance while paused either). Clamped to
+  // `duration` when known so it can't tick past the end before the next
+  // reconciling poll or the natural end-file event catches up.
+  useEffect(() => {
+    if (status !== "playing") return;
+    const t = setInterval(() => {
+      setPosition((p) => (p === null ? p : duration !== null ? Math.min(duration, p + 1) : p + 1));
+    }, POSITION_TICK_MS);
+    return () => clearInterval(t);
+  }, [status, duration]);
+
   const play = useCallback(
     (id: string, trackTitle: string) => {
       setStatus("loading");
@@ -108,12 +133,21 @@ export function usePlayer(player: MpvClient): UsePlayerResult {
     setPosition(null);
     setDuration(null);
   }, [player]);
+  // Seeking only sends mpv the command - the displayed position previously waited
+  // for the NEXT scheduled poll tick (up to POSITION_POLL_MS later) to catch up,
+  // which read as a real lag on every seek press. Update `position` optimistically
+  // here so the progress bar/timestamp move instantly; the existing poll still
+  // reconciles it against mpv's actual value shortly after (a network stream can
+  // seek slightly differently than a flat +/-10s, so this is a fast estimate, not
+  // the final source of truth).
   const seekForward = useCallback(() => {
     if (status === "idle") return;
+    setPosition((p) => (p === null ? p : Math.min(duration ?? Infinity, p + 10)));
     player.seek(10).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-  }, [player, status]);
+  }, [player, status, duration]);
   const seekBackward = useCallback(() => {
     if (status === "idle") return;
+    setPosition((p) => (p === null ? p : Math.max(0, p - 10)));
     player.seek(-10).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, [player, status]);
 
