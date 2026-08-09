@@ -40,10 +40,6 @@ queue.
   playlist in order; the next queued track starts automatically when one ends. `p` on
   a playlist/album/artist queues its whole tracklist (or an artist's top songs) at once.
 - **Full transport controls** - play/pause, stop, seek, next/prev queued track.
-- **Monokai-family theme** - a lime-on-near-black "Sonic Console" theme derived from
-  Ghostty's Monokai palette, matching this author's other TUIs
-  ([cg-gh](https://github.com/michaeljymsgutierrez/cg-gh),
-  [cg-fileman](https://github.com/michaeljymsgutierrez/cg-fileman)).
 
 ## Quick start
 
