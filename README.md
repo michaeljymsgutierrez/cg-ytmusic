@@ -9,13 +9,9 @@ queue.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node >=18](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](package.json)
 
-## Screenshot
+## Demo
 
-<!-- TODO: replace with a real screenshot or GIF of the dashboard, e.g. saved to
-     docs/screenshot.png and referenced as: ![cg-ytmusic](docs/screenshot.png) -->
-
-> 🖼️ Screenshot/GIF coming soon - the dashboard is a 3-panel layout (Sidebar |
-> Library/Queue | Now Playing) with a lime-on-near-black "Sonic Console" theme.
+![cg-ytmusic demo](docs/demo.gif)
 
 ## Contents
 
