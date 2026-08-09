@@ -1,7 +1,7 @@
 {
   "name": "cg-ytmusic",
   "version": "0.1.0",
-  "description": "A simple terminal music player for YouTube Music - browse your library, search, and play, powered by Ink.",
+  "description": "A terminal music player for YouTube Music - browse your real library, search, and play through mpv, built with Ink.",
   "type": "module",
   "bin": {
     "cg-ytmusic": "dist/cli.js"
@@ -33,10 +33,15 @@
   "author": "Michael Jyms Gutierrez",
   "keywords": [
     "youtube-music",
+    "terminal",
     "tui",
-    "ink",
     "cli",
-    "music-player"
+    "music-player",
+    "ink",
+    "react",
+    "typescript",
+    "mpv",
+    "nodejs"
   ],
   "license": "MIT",
   "dependencies": {
