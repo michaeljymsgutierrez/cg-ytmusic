@@ -70,6 +70,41 @@ During development, run it straight from source without building:
 pnpm dev
 ```
 
+### Install as a global command (pnpm/npm link)
+
+To run `cg-ytmusic` from anywhere as a real global command (not just `pnpm start` from
+inside the repo), link the built package instead of publishing it:
+
+```bash
+pnpm build
+pnpm link      # registers this checkout's `cg-ytmusic` bin globally
+
+cg-ytmusic --version
+```
+
+or with npm:
+
+```bash
+npm run build
+npm link       # same idea, via npm's global link
+
+cg-ytmusic --version
+```
+
+To remove the global command again:
+
+```bash
+pnpm rm -g cg-ytmusic      # pnpm (plain `pnpm unlink` does NOT remove a global link -
+                           # confirmed live: it reports "Nothing to unlink" and leaves
+                           # the command in place; `pnpm rm -g` is what actually works)
+# or
+npm unlink -g cg-ytmusic   # npm
+```
+
+Both point the global `cg-ytmusic` command at this checkout's `dist/cli.js` (see the
+`bin` field in `package.json`) - rebuilding (`pnpm build`) updates what the linked
+command runs without needing to link again.
+
 ## Sign-in
 
 `cg-ytmusic` signs in with a YouTube session cookie rather than OAuth - youtubei.js's
