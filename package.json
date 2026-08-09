@@ -26,6 +26,11 @@
     "type": "git",
     "url": "git+https://github.com/michaeljymsgutierrez/cg-ytmusic.git"
   },
+  "bugs": {
+    "url": "https://github.com/michaeljymsgutierrez/cg-ytmusic/issues"
+  },
+  "homepage": "https://github.com/michaeljymsgutierrez/cg-ytmusic#readme",
+  "author": "Michael Jyms Gutierrez",
   "keywords": [
     "youtube-music",
     "tui",
