@@ -1,26 +1,33 @@
 # cg-ytmusic
 
 A terminal music player for YouTube Music, built with [Ink](https://github.com/vadimdemedes/ink).
-Signs in with your real Google account (via a pasted session cookie), browses your
-library/playlists/artists, searches, and plays audio through [mpv](https://mpv.io),
-with autoplay-next through a queue.
+Signs in with your real Google account, browses your library/playlists/artists,
+searches, and plays audio through [mpv](https://mpv.io), with autoplay-next through a
+queue.
 
-## Quick start
+[![CI](https://github.com/michaeljymsgutierrez/cg-ytmusic/actions/workflows/ci.yml/badge.svg)](https://github.com/michaeljymsgutierrez/cg-ytmusic/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node >=18](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](package.json)
 
-Requires Node.js >= 18, [mpv](https://mpv.io), and [yt-dlp](https://github.com/yt-dlp/yt-dlp)
-on your PATH.
+## Screenshot
 
-```bash
-brew install mpv yt-dlp   # macOS; see Requirements below for other platforms
+<!-- TODO: replace with a real screenshot or GIF of the dashboard, e.g. saved to
+     docs/screenshot.png and referenced as: ![cg-ytmusic](docs/screenshot.png) -->
 
-git clone git@github.com:michaeljymsgutierrez/cg-ytmusic.git
-cd cg-ytmusic
-pnpm install
-pnpm dev
-```
+> 🖼️ Screenshot/GIF coming soon - the dashboard is a 3-panel layout (Sidebar |
+> Library/Queue | Now Playing) with a lime-on-near-black "Sonic Console" theme.
 
-On first run it walks you through sign-in (see [Sign-in](#sign-in) below). See
-[Keybindings](#keybindings) for the controls once you're in.
+## Contents
+
+- [Features](#features)
+- [Quick start](#quick-start)
+- [Requirements](#requirements)
+- [Install](#install)
+- [Sign-in](#sign-in)
+- [Keybindings](#keybindings)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
@@ -33,9 +40,27 @@ On first run it walks you through sign-in (see [Sign-in](#sign-in) below). See
   playlist in order; the next queued track starts automatically when one ends. `p` on
   a playlist/album/artist queues its whole tracklist (or an artist's top songs) at once.
 - **Full transport controls** - play/pause, stop, seek, next/prev queued track.
-- **Monokai theme** - Ghostty's Monokai Pro palette, matching this author's other TUIs
+- **Monokai-family theme** - a lime-on-near-black "Sonic Console" theme derived from
+  Ghostty's Monokai palette, matching this author's other TUIs
   ([cg-gh](https://github.com/michaeljymsgutierrez/cg-gh),
   [cg-fileman](https://github.com/michaeljymsgutierrez/cg-fileman)).
+
+## Quick start
+
+Requires Node.js >= 18, [mpv](https://mpv.io), and [yt-dlp](https://github.com/yt-dlp/yt-dlp)
+on your `PATH`.
+
+```bash
+brew install mpv yt-dlp   # macOS; see Requirements below for other platforms
+
+git clone https://github.com/michaeljymsgutierrez/cg-ytmusic.git
+cd cg-ytmusic
+pnpm install
+pnpm dev
+```
+
+On first run it walks you through sign-in (see [Sign-in](#sign-in) below). See
+[Keybindings](#keybindings) for the controls once you're in.
 
 ## Requirements
 
@@ -57,7 +82,7 @@ missing.
 ### From source
 
 ```bash
-git clone git@github.com:michaeljymsgutierrez/cg-ytmusic.git
+git clone https://github.com/michaeljymsgutierrez/cg-ytmusic.git
 cd cg-ytmusic
 pnpm install
 pnpm build
@@ -70,7 +95,7 @@ During development, run it straight from source without building:
 pnpm dev
 ```
 
-### Install as a global command (pnpm/npm link)
+### As a global command (pnpm/npm link)
 
 To run `cg-ytmusic` from anywhere as a real global command (not just `pnpm start` from
 inside the repo), link the built package instead of publishing it:
@@ -94,9 +119,9 @@ cg-ytmusic --version
 To remove the global command again:
 
 ```bash
-pnpm rm -g cg-ytmusic      # pnpm (plain `pnpm unlink` does NOT remove a global link -
-                           # confirmed live: it reports "Nothing to unlink" and leaves
-                           # the command in place; `pnpm rm -g` is what actually works)
+pnpm rm -g cg-ytmusic      # pnpm - plain `pnpm unlink` does NOT remove a global link
+                           # (it reports "Nothing to unlink" and leaves the command in
+                           # place); `pnpm rm -g` is what actually works
 # or
 npm unlink -g cg-ytmusic   # npm
 ```
@@ -123,9 +148,11 @@ On first run (or whenever the cookie expires), the app walks you through it:
 The cookie is cached to `~/.config/cg-ytmusic/cookie.txt` and reused automatically on
 future launches - you only need to do this again once it expires.
 
-**Do not paste the full request headers or the `authorization` line anywhere outside
-the app's own prompt** - the `Cookie` header carries your live Google session
-credentials (equivalent to being logged in), so treat it like a password.
+> **Security note:** do not paste the full request headers or the `authorization` line
+> anywhere outside the app's own prompt - the `Cookie` header carries your live Google
+> session credentials (equivalent to being logged in), so treat it like a password. See
+> [SECURITY.md](SECURITY.md) for how this project handles it and how to report a
+> vulnerability.
 
 ## Keybindings
 
@@ -148,6 +175,16 @@ credentials (equivalent to being logged in), so treat it like a password.
 ```bash
 pnpm dev          # run from source with tsx
 pnpm typecheck    # tsc --noEmit
-pnpm test         # vitest
+pnpm test         # vitest - unit tests for hooks, components, and core logic
 pnpm build        # compile to dist/
 ```
+
+## Contributing
+
+Contributions are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup,
+project layout, code style, and commit/branch conventions. Please also read the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+[MIT](LICENSE) © Michael Jyms Gutierrez
