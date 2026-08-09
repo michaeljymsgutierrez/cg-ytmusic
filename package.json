@@ -1,6 +1,6 @@
 {
   "name": "cg-ytmusic",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A terminal music player for YouTube Music - browse your real library, search, and play through mpv, built with Ink.",
   "type": "module",
   "bin": {
