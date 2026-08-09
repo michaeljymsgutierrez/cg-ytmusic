@@ -16,13 +16,18 @@ const ART_MIN_HEIGHT = 6; // outer rows, including the 2-row border - matches th
 // is roughly content_width / CELL_ASPECT.
 const CELL_ASPECT = 2.5;
 const ART_MAX_HEIGHT = Math.round(ART_CONTENT_WIDTH / CELL_ASPECT) + 2; // +2 for border rows
-const ART_GLYPHS = ["░", "▒", "▓"];
-// Previously every glyph shared one flat theme.border grey - against the near-black
-// background that read as nearly invisible. Denser glyphs (▓) get a lighter shade so
-// the pattern actually has visible contrast/variation, sparser glyphs (░) stay dimmer -
-// approximating "opacity" the way a real placeholder thumbnail would, since terminals
-// have no real alpha channel.
-const ART_GLYPH_COLORS = [theme.border, "#666666", theme.dim];
+// 5 brightness levels (blank -> darkest -> lightest) instead of 3, so the ripple below
+// has room for a real gradient rather than flatly cycling 3 shades. Level 4 (the crest)
+// is the theme's one accent color - everything else stays within its graduated greys,
+// matching Sonic Console's near-monochrome design rather than introducing new hues.
+const ART_GLYPHS = [" ", "░", "▒", "▓", "█"];
+const ART_GLYPH_COLORS = [theme.dim, theme.border, theme.dim, theme.fg, theme.accent];
+// Radians of ripple phase advanced per whole second of playback (`phase` below) - tuned
+// so a new ring is visibly born roughly every second, not so fast it looks noisy.
+const RIPPLE_SPEED = 1.3;
+// Radians of ripple phase per unit of (aspect-corrected) distance from center - controls
+// how tightly packed the concentric rings are across the grid.
+const RIPPLE_FREQUENCY = 0.9;
 
 function formatTime(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -46,12 +51,15 @@ function hashOf(s: string): number {
  *
  * `height` sizes the box to whatever vertical room PlayerPanel actually has (was a
  * fixed 4-row constant, leaving most of a tall terminal as dead space above/below).
- * `phase` (whole seconds of playback elapsed) shifts the pattern by one diagonal
- * step per tick, so it visibly flows while playing instead of sitting static -
- * riding usePlayer's EXISTING 1s position-poll interval rather than a new one
- * (this project already paid for one flicker incident from an extra decorative
- * timer, see PlayerPanel's old Visualizer). Paused/idle: `phase` stops advancing
- * (mpv's own time-pos freezes), so the pattern freezes too, same as it always did. */
+ * The pattern is a ripple expanding outward from the music note's position (distance
+ * from center, corrected for the terminal's non-square cells via CELL_ASPECT, run
+ * through a sine wave) rather than a flat diagonal - `phase` (whole seconds of
+ * playback elapsed) advances the ripple by one ring roughly once a second, riding
+ * usePlayer's EXISTING 1s position tick rather than a new timer (this project already
+ * paid for one flicker incident from an extra decorative timer, see PlayerPanel's old
+ * Visualizer). `seed` offsets each track's ripple frequency/phase slightly so two
+ * different tracks don't animate identically. Paused/idle: `phase` stops advancing
+ * (mpv's own time-pos freezes), so the ripple freezes too, same as it always did. */
 function AlbumArt({
   trackId,
   width,
@@ -70,15 +78,27 @@ function AlbumArt({
   const contentWidth = outerWidth - 2;
   const contentHeight = Math.max(1, height - 2);
   const seed = hashOf(trackId ?? "idle");
+  const trackFrequency = RIPPLE_FREQUENCY + (seed % 5) * 0.15;
+  const trackOffset = seed % 7;
+  const centerX = (contentWidth - 1) / 2;
+  const centerY = (contentHeight - 1) / 2;
+  const maxLevel = ART_GLYPHS.length - 1;
   const rows: number[][] = [];
   for (let y = 0; y < contentHeight; y++) {
     const row: number[] = [];
     for (let x = 0; x < contentWidth; x++) {
-      row.push((seed + x * 7 + y * 13 + phase) % ART_GLYPHS.length);
+      const dx = x - centerX;
+      const dy = (y - centerY) * CELL_ASPECT; // corrects for tall/narrow terminal cells
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const wave = Math.sin(dist * trackFrequency - phase * RIPPLE_SPEED + trackOffset);
+      row.push(Math.round(((wave + 1) / 2) * maxLevel));
     }
     rows.push(row);
   }
   const midRow = Math.floor(contentHeight / 2);
+  // The note sits at the ripple's origin (dist=0) - reuse the same wave so it visibly
+  // pulses bold+accent right as each new ring is born there, instead of sitting static.
+  const notePulse = Math.sin(trackOffset - phase * RIPPLE_SPEED) > 0.3;
   return (
     <Box
       flexDirection="column"
@@ -89,7 +109,7 @@ function AlbumArt({
     >
       {rows.map((row, i) =>
         i === midRow ? (
-          <Text key={i} color={theme.dim} wrap="truncate-end">
+          <Text key={i} color={notePulse ? theme.accent : theme.fg} bold={notePulse} wrap="truncate-end">
             {ICON.music.padStart(Math.floor(contentWidth / 2)).padEnd(contentWidth)}
           </Text>
         ) : (
