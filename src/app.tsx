@@ -381,7 +381,7 @@ export function App({ version, player }: AppProps): React.ReactElement {
             borderColor={theme.border}
             paddingBottom={0}
           >
-            <Header brand="cg-ytmusic" width={panelWidth} />
+            <Header brand="cg-ytmusic" version={version} width={panelWidth} />
           </Box>
           <Box flexDirection="row" width={panelWidth}>
             <Panel title="MENU" width={sidebarWidth} height={dashboardRows}>
